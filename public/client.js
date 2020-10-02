@@ -1,54 +1,115 @@
-const socket = io()
-let name;
-let textarea = document.querySelector('#textarea')
-let messageArea = document.querySelector('.message__area')
-do {
-    name = prompt('Please enter your name: ')
-} while(!name)
 
-textarea.addEventListener('keyup', (e) => {
-    if(e.key === 'Enter') {
-        sendMessage(e.target.value)
+const socket = io();
+
+class ClientController {
+    Model = null;
+    View = null;
+
+    constructor(model, view) {
+        this.Model = model;
+        this.View = view;
+        this.Initialize();
     }
-})
 
-function sendMessage(message) {
-    let msg = {
-        user: name,
-        message: message.trim()
+    Initialize() {
+        this.CreateBinding();
+        this.CreateView();
     }
-    // Append 
-    appendMessage(msg, 'outgoing')
-    textarea.value = ''
-    scrollToBottom()
 
-    // Send to server 
-    socket.emit('message', msg)
+    CreateBinding() {
+        this.Model.ReceivedMessage(this.HandleReceivedMessage.bind(this));
+        this.View.BindSendMessage(this.HandleSendMessage.bind(this));
+    }
 
+    HandleReceivedMessage(messageModel) {
+        this.View.ReceivedMessage(messageModel);
+    }
+
+    HandleSendMessage(messageModel) {
+        this.Model.SendMessage(messageModel);
+    }
+
+    CreateView() {
+        this.View.Load();
+    }
 }
 
-function appendMessage(msg, type) {
-    let mainDiv = document.createElement('div')
-    let className = type
-    mainDiv.classList.add(className, 'message')
+class ClientView {
+    CurrentUser = null;
+    Textarea = null;
+    MessageArea = null;
 
-    let markup = `
-        <h4>${msg.user}</h4>
-        <p>${msg.message}</p>
-    `
-    mainDiv.innerHTML = markup
-    messageArea.appendChild(mainDiv)
+    constructor() {
+        this.InitializeComponent();
+    }
+
+    InitializeComponent() {
+        this.Textarea = document.querySelector('#textarea');
+        this.MessageArea = document.querySelector('.message__area');
+    }
+
+    Load() {
+        do {
+            this.CurrentUser = prompt('Please enter your name: ');
+        } while (!this.CurrentUser);
+    }
+
+    BindSendMessage(handleSendMessage) {
+        this.Textarea.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                const objMessageModel = new MessageModel()
+                objMessageModel.Message = this.Textarea.value;
+                objMessageModel.User = this.CurrentUser ?? "";
+                handleSendMessage(objMessageModel);
+                this.CreateMessage(objMessageModel);
+            }
+        });
+    }
+
+    CreateMessage(objMessageModel) {
+        this.Textarea.value = '';
+        this.InsertMessage(objMessageModel,'outgoing')
+    }
+
+    ReceivedMessage(objMessageModel) {
+        this.InsertMessage(objMessageModel,'incoming')
+    }
+
+    InsertMessage(objMessageModel,type) {
+        this.AppendMessage(objMessageModel, type);
+        this.ScrollToBottom();
+    }
+
+    AppendMessage(msg, type) {
+        const mainDiv = document.createElement('div')
+        const className = type
+        mainDiv.classList.add(className, 'message')
+
+        let markup = `
+            <h4>${msg.User}</h4>
+            <p>${msg.Message}</p>
+        `
+        mainDiv.innerHTML = markup
+        this.MessageArea.appendChild(mainDiv)
+    }
+
+    ScrollToBottom() {
+        this.MessageArea.scrollTop = this.MessageArea.scrollHeight;
+    }
 }
 
-// Recieve messages 
-socket.on('message', (msg) => {
-    appendMessage(msg, 'incoming')
-    scrollToBottom()
-})
+class MessageModel {
+    User = "";
+    Message = "";
 
-function scrollToBottom() {
-    messageArea.scrollTop = messageArea.scrollHeight
+    SendMessage(objData) {
+        objData.Message = objData.Message.trim();
+        socket.emit('message', objData)
+    }
+
+    ReceivedMessage(callbackReceivedMessage) {
+        socket.on('message', objData => callbackReceivedMessage(objData))
+    }
 }
 
-
-
+_ = new ClientController(new MessageModel(), new ClientView());
